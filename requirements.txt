@@ -1,0 +1,3 @@
+requests
+rich
+R2Log
